@@ -7,16 +7,9 @@
   "docstatus": 0,
   "idx": 0,
   "script_type": "Scheduler Event",
-  "reference_doctype": null,
   "event_frequency": "Daily",
-  "cron_format": null,
-  "doctype_event": "Before Insert",
-  "api_method": null,
-  "allow_guest": 0,
   "module": "Rental Billing",
   "disabled": 0,
-  "enable_rate_limit": 0,
-  "rate_limit_count": 5,
-  "rate_limit_seconds": 86400,
-  "doctype": "Server Script"
+  "doctype": "Server Script",
+  "script": "schedules = frappe.get_all(\n    \"Billing Schedule\",\n    filters={\n        \"status\": \"Pending\",\n        \"billing_date\": [\"<=\", frappe.utils.today()]\n    },\n    fields=[\n        \"name\", \"customer\", \"contract\",\n        \"amount\", \"billing_date\"\n    ]\n)\n\nfor schedule in schedules:\n    try:\n        invoice = frappe.new_doc(\"Sales Invoice\")\n        invoice.customer = schedule.customer\n        invoice.posting_date = schedule.billing_date\n        invoice.due_date = frappe.utils.add_days(schedule.billing_date, 30)\n\n        invoice.append(\"items\", {\n            \"item_code\": \"Rental Charge\",\n            \"item_name\": f\"Rental - {schedule.contract}\",\n            \"description\": f\"Rental billing for contract {schedule.contract}\",\n            \"qty\": 1,\n            \"rate\": schedule.amount,\n            \"amount\": schedule.amount\n        })\n\n        invoice.insert(ignore_permissions=True)\n\n        frappe.db.set_value(\"Billing Schedule\", schedule.name, {\n            \"status\": \"Invoiced\",\n            \"sales_invoice\": invoice.name\n        })\n\n        frappe.db.commit()\n\n    except Exception as e:\n        frappe.log_error(\n            message=str(e),\n            title=f\"Invoice creation failed for schedule {schedule.name}\"\n        )"
 }
